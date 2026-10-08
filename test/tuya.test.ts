@@ -1,4 +1,4 @@
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {Zcl} from "zigbee-herdsman";
 import {findByDevice, type Tz} from "../src/index";
 import * as tuya from "../src/lib/tuya";
@@ -348,9 +348,55 @@ describe("lib/tuya", () => {
         });
     });
 
+    describe("TS130F manufacturer-dependent switch type", () => {
+        const resolve = async (manufacturerName: string) => {
+            const device = mockDevice({modelID: "TS130F", manufacturerName, endpoints: [{ID: 1}]});
+            const definition = await findByDevice(device);
+            const exposes = typeof definition.exposes === "function" ? definition.exposes(device, {}) : definition.exposes;
+            return {definition, exposes, names: exposes.map((expose) => expose.name ?? expose.property ?? expose.type)};
+        };
+
+        it("uses the manuSpecificTuya3 wall-switch selector for the Moes ZM-108-M", async () => {
+            const {definition, exposes, names} = await resolve("_TZ3210_mldzab8w");
+
+            expect(definition).toMatchObject({model: "ZM-108-M", vendor: "Moes", description: "Smart curtain switch module"});
+            expect(names).toStrictEqual([
+                "cover",
+                "moving",
+                "motor_reversal",
+                "calibration",
+                "calibration_time",
+                "indicator_mode",
+                "backlight_mode",
+                "switch_type_curtain",
+            ]);
+            expect(exposes.find((expose) => expose.name === "switch_type_curtain")).toMatchObject({
+                values: ["flip-switch", "sync-switch", "button-switch", "button2-switch"],
+            });
+        });
+
+        it("leaves the generic TS130F switch type unchanged", async () => {
+            const {definition, names} = await resolve("_TZ3000_unlistedxx");
+
+            expect(definition).toMatchObject({model: "TS130F", vendor: "Tuya", description: "Curtain/blind switch"});
+            expect(names).toStrictEqual([
+                "cover",
+                "moving",
+                "motor_reversal",
+                "calibration",
+                "calibration_time",
+                "indicator_mode",
+                "backlight_mode",
+                "switch_type",
+            ]);
+        });
+    });
+
     describe("TS0001 manufacturer-dependent settings", () => {
         // Endpoint layout as reported by a _TZ3000_p26flek3: ep1 carries genOnOff plus the Tuya
-        // private clusters 0xE000 (inching) and 0xE001 (switch type, power-on behaviour); ep242 is green power.
+        // private clusters 0xE000 and 0xE001 (switch type, power-on behaviour); ep242 is green power.
+        // The device lists 0xE000 but has no configurable inching: it always pulses for a fixed ~1 s,
+        // whatever inching state or time is written.
         const layout = [
             {ID: 1, profileID: 260, deviceID: 256, inputClusterIDs: [3, 4, 5, 6, 0xe000, 0xe001, 0], outputClusterIDs: [25, 10]},
             {ID: 242, profileID: 0xa1e0, deviceID: 97, inputClusterIDs: [], outputClusterIDs: [33]},
@@ -375,14 +421,7 @@ describe("lib/tuya", () => {
             const {definition, properties} = await resolve("_TZ3000_p26flek3");
 
             expect(definition.model).toBe("TS0001");
-            expect(properties).toStrictEqual([
-                "state",
-                "power_on_behavior",
-                "switch_type",
-                "backlight_mode",
-                "indicator_mode",
-                "inching_control_set",
-            ]);
+            expect(properties).toStrictEqual(["state", "power_on_behavior", "switch_type", "backlight_mode", "indicator_mode"]);
         });
 
         it("leaves the settings of _TZ3000_bzzgvet0 unchanged", async () => {
@@ -408,10 +447,111 @@ describe("lib/tuya", () => {
             expect(definition.toZigbee.find((converter) => converter.key?.includes("backlight_mode"))).toBe(tuya.tz.backlight_indicator_mode_2);
             expect(definition.toZigbee.find((converter) => converter.key?.includes("indicator_mode"))).toBe(tuya.tz.backlight_indicator_mode_1);
         });
+    });
 
-        it("decodes the inching payload the device answers with", () => {
-            // "AAAA" is the value read from 0xE000/0xD003 on the device with inching switched off.
-            expect(tuya.valueConverter.inchingSwitch.from("AAAA")).toStrictEqual({inching_control_1: "DISABLE", inching_time_1: 0});
+    describe("MTG075-ZB-RL distance_report (DP 116)", () => {
+        const resolve = async (manufacturerName: string) => {
+            const device = mockDevice({modelID: "TS0601", manufacturerName, endpoints: [{ID: 1}]});
+            const definition = await findByDevice(device);
+            const exposes = typeof definition.exposes === "function" ? definition.exposes(device, {}) : definition.exposes;
+            return {device, definition, properties: exposes.map((expose) => expose.property)};
+        };
+
+        it("exposes distance_report only for the MTG275-ZB-RL (_TZE204_dtzziy1e)", async () => {
+            const mtg275 = await resolve("_TZE204_dtzziy1e");
+            expect(mtg275.definition.model).toStrictEqual("MTG275-ZB-RL");
+            expect(mtg275.properties).toContain("distance_report");
+
+            // Same definition, DP 116 not verified on this one.
+            const other = await resolve("_TZE204_sbyx0lm6");
+            expect(other.definition.model).toStrictEqual("MTG075-ZB-RL");
+            expect(other.properties).toContain("target_distance");
+            expect(other.properties).not.toContain("distance_report");
+        });
+
+        it("writes distance_report to DP 116 as enum", async () => {
+            const {device, definition} = await resolve("_TZE204_dtzziy1e");
+            const endpoint = device.getEndpoint(1);
+            expect(definition.toZigbee).toContain(tuya.tz.datapoints);
+            const meta: Tz.Meta = {
+                state: {},
+                device,
+                deviceExposesChanged: () => {},
+                message: {distance_report: "OFF"},
+                mapped: definition,
+                options: {},
+                publish: null,
+                endpoint_name: null,
+            };
+            await tuya.tz.datapoints.convertSet(endpoint, "distance_report", "OFF", meta);
+            expect(endpoint.command).toHaveBeenCalledWith(
+                "manuSpecificTuya",
+                "dataRequest",
+                expect.objectContaining({dpValues: [{dp: 116, datatype: 4, data: Buffer.from([0])}]}),
+                expect.anything(),
+            );
+        });
+
+        it("reads distance_report from DP 116", async () => {
+            const {device, definition} = await resolve("_TZE204_dtzziy1e");
+            expect(definition.fromZigbee).toContain(tuya.fz.datapoints);
+            const msg = {
+                data: {dpValues: [{dp: 116, datatype: 4, data: Buffer.from([1])}]},
+                device,
+                endpoint: device.getEndpoint(1),
+                meta: {zclTransactionSequenceNumber: 1},
+                // biome-ignore lint/suspicious/noExplicitAny: generic
+            } as Fz.Message<any, any, any>;
+            const result = await tuya.fz.datapoints.convert(definition, msg, null, {}, {state: {}, device, deviceExposesChanged: () => {}});
+            expect(result).toStrictEqual({distance_report: "ON"});
+        });
+    });
+
+    describe("TS004F knob configure (ZG-101ZD)", () => {
+        // https://github.com/Koenkk/zigbee2mqtt/issues/31917
+        const unsupported = () => new Error("ZCL command genBasic.read(...) failed (Status 'UNSUPPORTED_ATTRIBUTE')");
+
+        it("ignores UNSUPPORTED_ATTRIBUTE on the magic packet and tuyaOperationMode write", async () => {
+            const device = mockDevice({modelID: "TS004F", manufacturerName: "_TZ3000_gwkzibhs", endpoints: [{ID: 1}]}, "EndDevice");
+            const definition = await findByDevice(device);
+            expect(definition.model).toStrictEqual("ZG-101ZD");
+            const endpoint = device.getEndpoint(1);
+            vi.mocked(endpoint.read).mockImplementation((cluster) => (cluster === "genBasic" ? Promise.reject(unsupported()) : Promise.resolve({})));
+            vi.mocked(endpoint.write).mockRejectedValue(unsupported());
+
+            await expect(definition.configure?.(device, device.getEndpoint(1), definition)).resolves.toBeUndefined();
+            expect(endpoint.read).toHaveBeenCalledWith("genPowerCfg", ["batteryVoltage", "batteryPercentageRemaining"]);
+            expect(endpoint.bind).toHaveBeenCalledWith("genOnOff", expect.anything());
+        });
+
+        it("still fails on other errors", async () => {
+            const device = mockDevice({modelID: "TS004F", manufacturerName: "_TZ3000_gwkzibhs", endpoints: [{ID: 1}]}, "EndDevice");
+            const definition = await findByDevice(device);
+            vi.mocked(device.getEndpoint(1).read).mockRejectedValue(new Error("Timeout"));
+
+            await expect(definition.configure?.(device, device.getEndpoint(1), definition)).rejects.toThrow("Timeout");
+        });
+    });
+
+    describe("TS004F button configure (ZG-101ZL)", () => {
+        // https://github.com/Koenkk/zigbee2mqtt/issues/31917
+        it("ignores UNSUPPORTED_ATTRIBUTE on the tuyaOperationMode write", async () => {
+            const device = mockDevice({modelID: "ZG-101ZL", manufacturerName: "HOBEIAN", endpoints: [{ID: 1}]}, "EndDevice");
+            const definition = await findByDevice(device);
+            expect(definition.model).toStrictEqual("ERS-10TZBVB-AA");
+            const endpoint = device.getEndpoint(1);
+            vi.mocked(endpoint.write).mockRejectedValue(new Error("ZCL command genOnOff.write(...) failed (Status 'UNSUPPORTED_ATTRIBUTE')"));
+
+            await expect(definition.configure?.(device, device.getEndpoint(1), definition)).resolves.toBeUndefined();
+            expect(endpoint.bind).toHaveBeenCalledWith("genOnOff", expect.anything());
+        });
+
+        it("still fails on other errors", async () => {
+            const device = mockDevice({modelID: "ZG-101ZL", manufacturerName: "HOBEIAN", endpoints: [{ID: 1}]}, "EndDevice");
+            const definition = await findByDevice(device);
+            vi.mocked(device.getEndpoint(1).write).mockRejectedValue(new Error("Timeout"));
+
+            await expect(definition.configure?.(device, device.getEndpoint(1), definition)).rejects.toThrow("Timeout");
         });
     });
 });
