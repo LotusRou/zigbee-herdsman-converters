@@ -1,5 +1,4 @@
 import * as fz from "../converters/fromZigbee";
-import * as tz from "../converters/toZigbee";
 import * as exposes from "../lib/exposes";
 import * as m from "../lib/modernExtend";
 import type {DefinitionWithExtend, Fz, Tz} from "../lib/types";
@@ -158,14 +157,16 @@ export const definitions: DefinitionWithExtend[] = [
         description: "Zigbee SR100 siren",
         extend: [m.onOff(), m.forceDeviceType({type: "EndDevice"}), m.iasZoneAlarm({zoneType: "alarm", zoneAttributes: ["alarm_1", "tamper"]})],
         exposes: [
-            exposes.composite('warning', 'warning', ea.SET)
+            .composite('warning', 'warning', ea.SET)
                 .withFeature(exposes.enum('level', ea.SET, ['low', 'medium', 'high', 'very_high'])
                 .withDescription('Sound level'))
                 .withFeature(exposes.binary('strobe', ea.SET, "ON", "OFF")
                 .withDescription('Turn on/off the strobe (light) during warning'))
-                .withFeature(exposes.numeric('strobe_duty_cycle', ea.SET)
-                .withValueMin(0).withValueMax(100)
-                .withDescription('Length of the flash cycle (range is 0-100 in increments of 10)')),
+                .withFeature(
+                    exposes.numeric('strobe_duty_cycle', ea.SET)
+                        .withValueMin(0)
+                        .withValueMax(100)
+                        .withDescription('Length of the flash cycle (range is 0-100 in increments of 10)')),
     ],
         meta: {disableDefaultResponse: true},
     },
