@@ -163,10 +163,10 @@ export const definitions: DefinitionWithExtend[] = [
                 .withFeature(exposes.binary("strobe", ea.SET, "ON", "OFF").withDescription("Turn on/off the strobe (light) during warning"))
                 .withFeature(
                     exposes
-                        .numeric('strobe_duty_cycle', ea.SET)
+                        .numeric("strobe_duty_cycle", ea.SET)
                         .withValueMin(0)
                         .withValueMax(100)
-                        .withDescription('Length of the flash cycle (range is 0-100 in increments of 10)')
+                        .withDescription("Length of the flash cycle (range is 0-100 in increments of 10)"),
                 ),
         ],
         meta: {disableDefaultResponse: true},
