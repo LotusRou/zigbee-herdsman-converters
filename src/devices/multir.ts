@@ -5,8 +5,6 @@ import type {DefinitionWithExtend, Fz, Tz} from "../lib/types";
 import * as utils from "../lib/utils";
 import {determineEndpoint} from "../lib/utils";
 
-const NS = "zhc:tz";
-
 const e = exposes.presets;
 const ea = exposes.access;
 
