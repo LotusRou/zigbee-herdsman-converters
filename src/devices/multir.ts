@@ -2,6 +2,10 @@ import * as fz from "../converters/fromZigbee";
 import * as exposes from "../lib/exposes";
 import * as m from "../lib/modernExtend";
 import type {DefinitionWithExtend, Fz, Tz} from "../lib/types";
+import * as utils from "../lib/utils";
+import {determineEndpoint} from "../lib/utils";
+
+const NS = "zhc:tz";
 
 const e = exposes.presets;
 const ea = exposes.access;
@@ -36,7 +40,7 @@ const tzLocal = {
 
 const tzsr100Local = {
     warning: {
-        key: ['warning'],
+        key: ["warning"],
         convertSet: async (entity, key, value, meta) => {
         const mode = {stop: 0, burglar: 1, fire: 2, emergency: 3, police_panic: 4, fire_panic: 5, emergency_panic: 6};
         const level = {low: 0, medium: 1, high: 2, very_high: 3};
@@ -59,8 +63,8 @@ const tzsr100Local = {
                 {
                     startwarninginfo: warningInfo, 
                     warningduration: values.duration,
-                    strobedutycycle: values.strobe_duty_cycle,
-                    strobelevel: values.strobe_level
+                    strobedutycycle: values.strobedutycycle,
+                    strobelevel: values.strobeLevel
                 },
               utils.getOptions(meta.mapped, entity),
             );
