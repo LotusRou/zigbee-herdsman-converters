@@ -49,7 +49,7 @@ const tzsr100Local = {
         const values = {
             mode: value.mode || "emergency",
             level: value.level || "medium",
-            strobe: value.strobe != null ? value.strobe : true,
+            strobe: (value.strobe === true || value.strobe === 'true' || value.strobe === 'ON') ? 1 : 0,
             duration: value.duration != null ? value.duration : 10,
             strobeDutyCycle: value.strobe_duty_cycle != null ? value.strobe_duty_cycle * 10 : 0,
             strobeLevel: value.strobe_level != null ? utils.getFromLookup(value.strobe_level, strobeLevel) : 2,
