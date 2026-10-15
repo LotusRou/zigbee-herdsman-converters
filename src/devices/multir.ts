@@ -37,41 +37,32 @@ const tzLocal = {
 const tzsr100Local = {
     warning: {
         key: ['warning'],
-        convertSet: (entity, key, value, meta) => {
-            const levelMap = {'low': 0, 'medium': 1, 'high': 2, 'very_high': 3};
-            const modeMap = {'stop': 0, 'burglar': 1, 'fire': 2, 'emergency': 3, 'police_panic': 4, 'fire_panic': 5, 'emergency_panic': 6};
-            const strobeLevelMap = {'low': 0, 'medium': 1, 'high': 2, 'very_high': 3};
-
-            const mode = value.mode || 'emergency';
-            const level = value.level || 'medium';
-            const strobe = (value.strobe === true || value.strobe === 'true' || value.strobe === 'ON') ? 1 : 0;
-            const duration = value.duration != null ? value.duration : 10;
-            const strobeLevel = strobeLevelMap[strobeLevel] !== undefined ? strobeLevelMap[strobeLevel] : 2; 
-            const strobeDutyCycle = value.strobe_duty_cycle != null ? value.strobe_duty_cycle * 10 : 0;
-
-            if (levelMap > 3) levelMap = 3;
-            if (levelMap < 3) levelMap = 3;
-
-            const payload = {
-                mode: modeMap[mode] !== undefined ? modeMap[mode] : 3,
-                level: levelMap[level] !== undefined ? levelMap[level] : 1,
-                strobe: strobe,
-                duration: duration,
-                strobe_level: strobeLevelMap[strobeLevel] !== undefined ? strobeLevelMap[strobeLevel] : 2,
-                strobe_duty_cycle: strobeDutyCycle
-            };
-            const warningInfo = (payload.mode << 4) | (payload.strobe << 2) | payload.level;
+        convertSet: async (entity, key, value, meta) => {
+        const mode = {stop: 0, burglar: 1, fire: 2, emergency: 3, police_panic: 4, fire_panic: 5, emergency_panic: 6};
+        const level = {low: 0, medium: 1, high: 2, very_high: 3};
+        const strobeLevel = {low: 0, medium: 1, high: 2, very_high: 3};
+            
+        const values = {
+            mode: value.mode || "emergency",
+            level: value.level || "medium",
+            strobe: (value.strobe === true || value.strobe === 'true' || value.strobe === 'ON') ? 1 : 0,
+            duration: value.duration != null ? value.duration : 10,
+            strobeDutyCycle: value.strobe_duty_cycle != null ? value.strobe_duty_cycle * 10 : 0,
+            strobeLevel: value.strobe_level != null ? utils.getFromLookup(value.strobe_level, strobeLevel) : 2,
+        };
+         let warningInfo;           
+         warningInfo = utils.getFromLookup(values.mode, mode << 4) + (values.strobe << 2) + utils.getFromLookup(values.level, level);
 
             await entity.command(
                 'ssIasWd', 
                 'startWarning', 
                 {
                     startwarninginfo: warningInfo, 
-                    warningduration: payload.duration,
-                    strobedutycycle: payload.strobe_duty_cycle,
-                    strobelevel: payload.strobe_level
+                    warningduration: values.duration,
+                    strobedutycycle: values.strobe_duty_cycle,
+                    strobelevel: values.strobe_level
                 },
-                {disableDefaultResponse: true}
+              utils.getOptions(meta.mapped, entity),
             );
             return {state: {warning: value}};
         },
@@ -200,7 +191,7 @@ export const definitions: DefinitionWithExtend[] = [
         description: "Zigbee SR100 siren",
         fromZigbee: [],
         toZigbee: [tzsr100Local.warning],
-        extend: [m.onOff({powerOnBehavior: false}).withDescription('On/off state of the switch(volume using the local buttons)'), m.forceDeviceType({type: "EndDevice"}), m.iasZoneAlarm({zoneType: "alarm", zoneAttributes: ["alarm_1", "tamper"]})],
+        extend: [m.onOff({powerOnBehavior: false}), m.forceDeviceType({type: "EndDevice"}), m.iasZoneAlarm({zoneType: "alarm", zoneAttributes: ["alarm_1", "tamper"]})],
         exposes: [
             exposes
                 .composite("warning", "warning", ea.SET)
