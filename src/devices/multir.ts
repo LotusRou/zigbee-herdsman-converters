@@ -38,10 +38,16 @@ const tzLocal = {
     } satisfies Tz.Converter,
 };
 
+
+
 const tzsr100Local = {
     MIRSR100: {
         key: ["warning"],
         convertSet: async (entity, key, value, meta) => {
+            
+        interface DeviceConfig {mode?: string; level?: string; strobe?: boolean; duration?: number; strobe_duty_cycle?: number; strobe_level?: any;}
+        const typedValue = value as DeviceConfig;
+            
         const mode = {stop: 0, burglar: 1, fire: 2, emergency: 3, police_panic: 4, fire_panic: 5, emergency_panic: 6};
         const level = {low: 0, medium: 1, high: 2, very_high: 3};
         const strobeLevel = {low: 0, medium: 1, high: 2, very_high: 3};
