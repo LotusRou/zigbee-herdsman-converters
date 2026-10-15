@@ -39,7 +39,7 @@ const tzLocal = {
 };
 
 const tzsr100Local = {
-    warning: {
+    MIRSR100: {
         key: ["warning"],
         convertSet: async (entity, key, value, meta) => {
         const mode = {stop: 0, burglar: 1, fire: 2, emergency: 3, police_panic: 4, fire_panic: 5, emergency_panic: 6};
@@ -49,13 +49,13 @@ const tzsr100Local = {
         const values = {
             mode: value.mode || "emergency",
             level: value.level || "medium",
-            strobe: (value.strobe === true || value.strobe === 'true' || value.strobe === 'ON') ? 1 : 0,
+            strobe: value.strobe != null ? value.strobe : true,
             duration: value.duration != null ? value.duration : 10,
             strobeDutyCycle: value.strobe_duty_cycle != null ? value.strobe_duty_cycle * 10 : 0,
             strobeLevel: value.strobe_level != null ? utils.getFromLookup(value.strobe_level, strobeLevel) : 2,
         };
          let warningInfo;           
-         warningInfo = utils.getFromLookup(values.mode, mode << 4) + (values.strobe << 2) + utils.getFromLookup(values.level, level);
+         warningInfo = (utils.getFromLookup(values.mode, mode) << 4) + ((values.strobe ? 1 : 0) << 2) + utils.getFromLookup(values.level, level);
 
             await entity.command(
                 'ssIasWd', 
@@ -63,14 +63,14 @@ const tzsr100Local = {
                 {
                     startwarninginfo: warningInfo, 
                     warningduration: values.duration,
-                    strobedutycycle: values.strobedutycycle,
+                    strobedutycycle: values.strobeDutyCycle,
                     strobelevel: values.strobeLevel
                 },
               utils.getOptions(meta.mapped, entity),
             );
             return {state: {warning: value}};
         },
-    },
+    } satisfies Tz.Converter,
 };
 const fzhe300Local = {
     HE300: {
@@ -194,7 +194,7 @@ export const definitions: DefinitionWithExtend[] = [
         vendor: "MultIR",
         description: "Zigbee SR100 siren",
         fromZigbee: [],
-        toZigbee: [tzsr100Local.warning],
+        toZigbee: [tzsr100Local.MIRSR100],
         extend: [m.onOff({powerOnBehavior: false}), m.forceDeviceType({type: "EndDevice"}), m.iasZoneAlarm({zoneType: "alarm", zoneAttributes: ["alarm_1", "tamper"]})],
         exposes: [
             exposes
